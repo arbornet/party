@@ -1,10 +1,5 @@
-/* config.h.  Generated automatically by configure.  */
 /* Define one of these to indicate what kind of locking to use */
 #define LOCK_FCNTL 1
-/* #undef LOCK_FLOCK */
-/* #undef LOCK_LOCKF */
-/* #undef LOCK_LOCKING */
-/* #undef LOCK_NONE */
 
 /* Define NOCLOSE if we don't want to support closed channels */
 /* #undef NOCLOSE */
@@ -26,12 +21,6 @@
 #define DFLT_DIR "/arbornet/var/party/log"
 #define DFLT_WHOFILE "/arbornet/var/party/partytmp"
 #define DFLT_MAILDIR "/var/mail"
-
-/* Define to `int' if <sys/types.h> doesn't define.  */
-/* #undef gid_t */
-
-/* Define if you don't have vprintf but do have _doprnt.  */
-/* #undef HAVE_DOPRNT */
 
 /* Define if you have <sys/wait.h> that is POSIX.1 compatible.  */
 #define HAVE_SYS_WAIT_H 1

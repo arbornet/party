@@ -903,11 +903,9 @@ void initmodes()
 	exit(1);
     }
     cbreak= cooked;		/* Structure assignment works? */
-#if defined(F_TERMIO) || defined(F_TERMIOS)
     cbreak.c_lflag&= ~(ECHO | ICANON);
     cbreak.c_cc[VMIN]= 1;
     cbreak.c_cc[VTIME]= 0;
-#endif /*F_TERMIO or F_TERMIOS*/
 #ifdef F_STTY
     cbreak.sg_flags &= ~ECHO;
     cbreak.sg_flags |= CBREAK;

@@ -134,29 +134,13 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-#ifdef HAVE_RANDOM
 #define RAND() random()
 #define MAXRAND 2147483647
 #define SEEDRAND(x) srandom(x)
-#else
-#define RAND() rand()
-#define MAXRAND 32767
-#define SEEDRAND(x) srand(x)
-#endif /*HAVE_RANDOM*/
 
 /* Method to set cbreak/cooked modes */
 
-#ifdef HAVE_TERMIOS_H
-# define F_TERMIOS
-#else
-# ifdef HAVE_TERMIO_H
-#  define F_TERMIO
-# else
-#  ifdef HAVE_SGTTY_H
-#   define F_STTY
-#  endif /* HAVE_SGTTY_H */
-# endif /* HAVE_TERMIO_H */
-#endif /* HAVE_TERMIOS_H */
+#define F_TERMIOS
 
 #include <termios.h>
 extern struct termios cooked, cbreak;
@@ -185,9 +169,7 @@ extern struct termios cooked, cbreak;
 #define LNEXT_CHAR '\026'
 #endif
 
-#ifdef TIOCGWINSZ
 #define WINDOW		/* Get terminal size from kernal */
-#endif
 
 #include <fcntl.h>
 #define LOCK(fd)      setlock(fd, F_WRLCK);
@@ -237,15 +219,9 @@ extern struct termios cooked, cbreak;
 #endif
 #endif
 
-#ifdef HAVE_SIGLONGJMP
 #define setjump(e,f) sigsetjmp(e,f)
 #define longjump(e,v) siglongjmp(e,v)
 #define jump_buf sigjmp_buf
-#else
-#define setjump(e,f) setjmp(e)
-#define longjump(e,v) longjmp(e,v)
-#define jump_buf jmp_buf
-#endif
 
 /* Option table structure */
 struct optent {

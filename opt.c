@@ -469,34 +469,6 @@ char *firstout(char *s, char *l)
     return s;
 }
 
-/* STRSTR() find a string in a string.  This is the dumb algorithm, meant only
- * for short strings.  It is only here for those Unixes who don't have one in
- * the system library.
- */
-
-#ifndef HAVE_STRSTR
-char *strstr(char *s, char *p)
-{
-    register char *sp, *pp;
-
-    for(sp= s, pp= p; *sp && *pp; )
-    {
-	if (*sp == *pp)
-	{
-	    sp++;
-	    pp++;
-	}
-	else
-	{
-	    sp= sp - (pp - p) + 1;
-	    pp= p;
-	}
-    }
-    return *pp ? NULL : sp-(pp-p);
-}
-#endif /* !HAVE_STRSTR */
- 
-
 /* LISTCHN: prints a list of channels.  This will include any channel named
  * uniquely in the chantab, plus any volatile channels with at least one user.
  */

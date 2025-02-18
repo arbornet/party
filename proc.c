@@ -80,9 +80,6 @@ FILE *upopen(char *cmd, char *mode)
 {
     int pip[2];
     int chd_pipe,par_pipe;
-#ifndef HAVE_DUP2
-    int t;
-#endif
 
     if (f_lastpop) upclose();
 
@@ -102,16 +99,7 @@ FILE *upopen(char *cmd, char *mode)
 	close(par_pipe);
 	if (chd_pipe != (*mode == 'r'?1:0))
 	{
-#ifndef HAVE_DUP2
-	    close(t = (*mode == 'r'?1:0));
-	    if (fcntl(chd_pipe,F_DUPFD,t) != t)
-	    {
-		printf("Panic: can dup pipe\n");
-		exit(1);
-	    }
-#else
 	    dup2(chd_pipe,(*mode == 'r'?1:0));
-#endif /*HAVE_DUP2*/
 	    close(chd_pipe);
 	}
 	setuid(getuid());

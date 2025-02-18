@@ -30,8 +30,7 @@ OBJS = party.o proc.o opt.o opttab.o output.o input.o users.o close.o \
 	ignore.o debug_stty.o
 
 DIST= INSTALLATION $(SRCS) $(INCL) makeopt.c noisetab party.1 \
-	partyhlp partytab chantab configure configure.in \
-	Makefile.in config.h.in install-sh
+	partyhlp partytab chantab
 
 all: party
 
@@ -56,14 +55,14 @@ makeopt: opttab.o makeopt.o party.h
 	$(CC) -o makeopt $(CFLAGS) makeopt.o opttab.o
 
 install: party
-	./install-sh -d $(bindir)
-	./install-sh -d $(localstatedir)
-	./install-sh -d $(sysconfdir)
+	install -d $(bindir)
+	install -d $(localstatedir)
+	install -d $(sysconfdir)
 	@if test "X$(sgid)" = "X"; then \
 	    echo $(INSTALL) -o $(suid) -m 4711 party $(bindir); \
 	    $(INSTALL) -o $(suid) -m 4711 party $(bindir); \
-	    echo ./install-sh -d -o $(suid) -m 755 $(localstatedir)/party/log; \
-	    ./install-sh -d -o $(suid) -m 755 $(localstatedir)/party/log; \
+	    echo install -d -o $(suid) -m 755 $(localstatedir)/party/log; \
+	    install -d -o $(suid) -m 755 $(localstatedir)/party/log; \
 	    echo rm -f $(localstatedir)/party/partytmp; \
 	    rm -f $(localstatedir)/party/partytmp; \
 	    echo touch $(localstatedir)/party/partytmp; \
@@ -75,8 +74,8 @@ install: party
 	else \
 	    echo $(INSTALL) -g $(sgid) -m 2711 party $(bindir); \
 	    $(INSTALL) -g $(sgid) -m 2711 party $(bindir); \
-	    echo ./install-sh -d -g $(sgid) -m 775 $(localstatedir)/party/log; \
-	    ./install-sh -d -g $(sgid) -m 775 $(localstatedir)/party/log; \
+	    echo install -d -g $(sgid) -m 775 $(localstatedir)/party/log; \
+	    install -d -g $(sgid) -m 775 $(localstatedir)/party/log; \
 	    echo rm -f $(localstatedir)/party/partytmp; \
 	    rm -f $(localstatedir)/party/partytmp; \
 	    echo touch $(localstatedir)/party/partytmp; \
@@ -87,7 +86,7 @@ install: party
 	    chmod 660 $(localstatedir)/party/partytmp; \
 	fi
 	-(cd $(bindir); $(LN) party pwho)
-	./install-sh -d $(sysconfdir)/party
+	mkdir -p $(sysconfdir)/party
 	$(INSTALL) -m 644 partytab $(sysconfdir)/party
 	$(INSTALL) -m 644 chantab $(sysconfdir)/party
 	$(INSTALL) -m 644 noisetab $(sysconfdir)/party
