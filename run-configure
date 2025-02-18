@@ -1,0 +1,1 @@
+./configure  --prefix=/arbornet  --with-suid=party  --bindir=/suid/bin  --localstatedir=/arbornet/var  --sysconfdir=/arbornet/etc

@@ -1,0 +1,44 @@
+This file contains any messages produced by compilers while
+running configure, to aid debugging if configure makes a mistake.
+
+configure:616: checking for gcc
+configure:729: checking whether the C compiler (cc  ) works
+configure:745: cc -o conftest    conftest.c  1>&5
+configure:742:1: warning: type specifier missing, defaults to 'int'; ISO C99 and later do not support implicit int [-Wimplicit-int]
+  742 | main(){return(0);}
+      | ^
+      | int
+1 warning generated.
+configure:771: checking whether the C compiler (cc  ) is a cross-compiler
+configure:776: checking whether we are using GNU C
+configure:804: checking whether cc accepts -g
+configure:866: checking for a BSD compatible install
+configure:919: checking whether ln -s works
+configure:943: checking for library containing tgetent
+configure:1006: checking how to run the C preprocessor
+configure:1086: checking for ANSI C header files
+configure:1190: checking for sys/wait.h that is POSIX.1 compatible
+configure:1232: checking whether time.h and sys/time.h may both be included
+configure:1270: checking for fcntl.h
+configure:1270: checking for paths.h
+configure:1270: checking for sys/file.h
+configure:1270: checking for sys/ioctl.h
+configure:1270: checking for sys/time.h
+configure:1270: checking for unistd.h
+configure:1311: checking for termios.h
+configure:1350: checking for off_t
+configure:1383: checking for uid_t in sys/types.h
+configure:1417: checking return type of signal handlers
+configure:1458: checking whether struct tm is in sys/time.h or time.h
+configure:1495: checking whether cc needs -traditional
+configure:1541: checking for vprintf
+configure:1648: checking for select
+configure:1648: checking for strstr
+configure:1648: checking for strchr
+configure:1648: checking for random
+configure:1648: checking for dup2
+configure:1648: checking for setreuid
+configure:1648: checking for setregid
+configure:1648: checking for siglongjmp
+configure:1707: checking whether fcntl locking seems to work
+configure:2058: checking where new mail is stored

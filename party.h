@@ -123,34 +123,16 @@
 
 #define BFSZ 1035
 
-#ifdef HAVE_PATHS_H
 #include <paths.h>
-#endif
 
-#ifdef HAVE_UNISTD_H
 #include <unistd.h>
-#else
-char *getlogin();
-#endif
 
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
 #endif
 
-#ifndef HAVE_STRCHR
-#define strchr index
-#define strrchr rindex
-#endif
-
-#ifdef STDC_HEADERS
 #include <stdlib.h>
 #include <stdarg.h>
-#else
-/* Honestly, we don't really support non-ANSI compilers any more */
-char *getenv();
-void *malloc(), *realloc();
-char *strchr(), *strrchr();
-#endif
 
 #ifdef HAVE_RANDOM
 #define RAND() random()
@@ -176,9 +158,8 @@ char *strchr(), *strrchr();
 # endif /* HAVE_TERMIO_H */
 #endif /* HAVE_TERMIOS_H */
 
-#ifdef F_TERMIOS
 #include <termios.h>
-struct termios cooked, cbreak;
+extern struct termios cooked, cbreak;
 #define GTTY(fd, st)    tcgetattr(fd, (st))
 #ifdef TCSASOFT
 #define STTY(fd, st)    tcsetattr(fd, TCSASOFT | TCSANOW, (st))
@@ -203,115 +184,22 @@ struct termios cooked, cbreak;
 #else
 #define LNEXT_CHAR '\026'
 #endif
-#endif /*F_TERMIOS*/
-
-#ifdef F_TERMIO
-#include <termio.h>
-struct termio cooked, cbreak;
-#define GTTY(fd, st)    ioctl(fd, TCGETA, (st))
-#define STTY(fd, st)    ioctl(fd, TCSETAF, (st))
-#define EOF_CHAR    (cooked.c_cc[VEOF])
-#define ERASE_CHAR  (cooked.c_cc[VERASE])
-#define KILL_CHAR   (cooked.c_cc[VKILL])
-#ifdef VREPRINT
-#define REPRINT_CHAR (cooked.c_cc[VREPRINT])
-#else
-#define REPRINT_CHAR '\022'
-#endif
-#ifdef VWERASE
-#define WERASE_CHAR (cooked.c_cc[VWERASE])
-#else
-#define WERASE_CHAR '\027'
-#endif
-#ifdef VLNEXT
-#define LNEXT_CHAR (cooked.c_cc[VLNEXT])
-#else
-#define LNEXT_CHAR '\026'
-#endif
-#endif /*F_TERMIO*/
-
-#ifdef F_STTY
-#include <sgtty.h>
-struct tchars tch;
-struct ltchars ltch;
-struct sgttyb cooked, cbreak;
-#define GTTY(fd, st)    ioctl(fd, TIOCGETP, (st))
-#define STTY(fd, st)    ioctl(fd, TIOCSETN, (st))
-#define EOF_CHAR (tch.t_eofc)
-#define ERASE_CHAR  (cooked.sg_erase)
-#define KILL_CHAR   (cooked.sg_kill)
-#ifdef TIOCGLTC
-#define WERASE_CHAR  (ltch.t_werasc)
-#define REPRINT_CHAR (ltch.t_rprntc)
-#define LNEXT_CHAR   (ltch.t_lnextc)
-#else
-#define WERASE_CHAR  '\027'
-#define REPRINT_CHAR '\022'
-#define LNEXT_CHAR   '\026'
-#endif
-#endif /*F_STTY*/
 
 #ifdef TIOCGWINSZ
 #define WINDOW		/* Get terminal size from kernal */
 #endif
 
-#ifdef LOCK_FCNTL
-#ifdef HAVE_FCNTL_H
 #include <fcntl.h>
-#endif
-#define LOCK(file)      setlock(fileno(file), F_WRLCK);
-#define UNLOCK(file)    setlock(fileno(file), F_UNLCK);
-#endif /* LOCK_FCNTL */
-
-#ifdef LOCK_FLOCK
-#ifdef HAVE_SYS_FILE_H
-#include <sys/file.h>
-#endif
-#define LOCK(file)      flock(fileno(file), LOCK_EX)
-#define UNLOCK(file)    flock(fileno(file), LOCK_UN)
-#endif /* LOCK_FLOCK */
-
-#ifdef LOCK_LOCKF
-#ifdef HAVE_SYS_FILE_H
-#include <sys/lockf.h>
-#endif
-#ifdef HAVE_SYS_FILE_H
-#include <sys/file.h>
-#endif
-#define LOCK(file)      fseek(file, 0L, 0), lockf(file, 1, 0L)
-#define UNLOCK(file)    fseek(file, 0L, 0), lockf(file, 0, 0L)
-#endif /* LOCK_LOCKF */
-
-#ifdef LOCK_LOCKING
-#ifdef HAVE_SYS_LOCKING_H
-#include <sys/locking.h>
-#endif
-#define LOCK(file)      fseek(file, 0L, 0), chk_lock(file, 1)
-#define UNLOCK(file)    fseek(file, 0L, 0), chk_lock(file, 0)
-#endif /* LOCK_LOCKING */
-
-#ifdef LOCK_NONE
-#define LOCK(file)
-#define UNLOCK(file)
-#endif /* LOCK_NONE */
+#define LOCK(fd)      setlock(fd, F_WRLCK);
+#define UNLOCK(fd)    setlock(fd, F_UNLCK);
 
 #ifdef SUID
 #define CHN_MODE 0644
 #define DEP_MODE 0600
 #define USR_MODE 0600
 
-#ifdef _POSIX_SAVED_IDS
-#define be_user()  seteuid(real_id)
-#define be_party() seteuid(eff_id)
-#else
-#ifdef HAVE_SETREUID
-#define be_user()  setreuid(eff_id,real_id)
-#define be_party() setreuid(real_id,eff_id)
-#else
-#define be_user()
-#define be_party()
-#endif /*!HAVE_SETREUID*/
-#endif /*_POSIX_SAVED_IDS*/
+#define be_user()  seteuid(real_uid)
+#define be_party() seteuid(eff_uid)
 #endif /*SUID*/
 
 #ifdef SGID
@@ -319,18 +207,8 @@ struct sgttyb cooked, cbreak;
 #define USR_MODE 0664
 #define DEP_MODE 0660
 
-#ifdef _POSIX_SAVED_IDS
-#define be_user()  setegid(real_id)
-#define be_party() setegid(eff_id)
-#else
-#ifdef HAVE_SETREGID
-#define be_user()  setregid(eff_id,real_id)
-#define be_party() setregid(real_id,eff_id)
-#else
-#define be_user()
-#define be_party()
-#endif /*!HAVE_SETREGID*/
-#endif /*_POSIX_SAVED_IDS*/
+#define be_group()  setegid(real_gid)
+#define be_partyg() setegid(eff_gid)
 #endif /*SGID*/
 
 #include <stdio.h>
@@ -340,24 +218,13 @@ struct sgttyb cooked, cbreak;
 #include <pwd.h>
 #include <ctype.h>
 #include <string.h>
-
-#if TIME_WITH_SYS_TIME
-#include <sys/time.h>
 #include <time.h>
-#else
-#if HAVE_SYS_TIME_H
-#include <sys/time.h>
-#else
-#include <time.h>
-#endif
-#endif
 
-#include <utmp.h>
 #ifndef UT_NAMESIZE
-#define UT_NAMESIZE 8
+#define UT_NAMESIZE 32
 #endif
 #ifndef UT_LINESIZE
-#define UT_LINESIZE 8
+#define UT_LINESIZE 16
 #endif
 
 /* UTMP is the location of the utmp file, which varies on some systems */
@@ -366,7 +233,7 @@ struct sgttyb cooked, cbreak;
 #ifdef _PATH_UTMP
 #define UTMP _PATH_UTMP
 #else
-#define UTMP "/etc/utmp"
+#define UTMP "/var/run/utx.active"
 #endif
 #endif
 
@@ -407,6 +274,7 @@ extern struct cmdent cmd[];	/* Command structure -- see opttab.c */
 
 extern int rst;			/* Party file open for read */
 extern FILE *wfd;		/* Party file open for write */
+extern int lfd;			/* Party file lock (not the party log) */
 extern int out_fd;		/* Stream to terminal or filter */
 extern char *progname;		/* Program name */
 extern char *channel;		/* Current channel number (NULL is outside)*/
@@ -420,7 +288,8 @@ extern char logtty[];		/* /dev/ttyXX that user logged into (utmp) */
 extern time_t logtime;		/* Time that the user logged in (utmp)*/
 
 extern FILE *debug;		/* Debug output file */
-extern uid_t real_id, eff_id;	/* Real and Effective uid */
+extern uid_t real_uid, eff_uid;	/* Real and Effective uid */
+extern gid_t real_gid, eff_gid;
 extern RETSIGTYPE (*oldsigpipe)();
 
 /* The following buffer gets used for all sorts of things in all sorts of
@@ -428,8 +297,8 @@ extern RETSIGTYPE (*oldsigpipe)();
  */
 
 #define INDENT UT_NAMESIZE+2	/* Just changing this value won't work */
-char inbuf[BFSZ+INDENT+2];	/* Text buffer - first 10 for "name:   " */
-char *txbuf;			/* Text buffer - pointer to respose portion */
+extern char inbuf[BFSZ+INDENT+2]; /* Text buffer - first 10 for "name:   " */
+extern char *txbuf;		/* Text buffer - pointer to respose portion */
 				/*               of inbuf */
 
 #define CHN_LEN 12		/* Maximum length of channel name */
@@ -457,17 +326,13 @@ void help(char *, int);
 char *exptilde(char *);
 void readfile(char *);
 char *chn_file_name(char *, int);
+char *chn_lockfile_name(char *, int);
 int join_party(char *);
 void setmailfile(void);
 char *leafname(char *);
 int badname(char *);
 int convert(char *);
-#ifdef LOCK_LOCKING
-void chk_lock(FILE *, int);
-#endif
-#ifdef LOCK_FCNTL
 void setlock(int, int);
-#endif
 off_t backup(int);
 void done(int);
 RETSIGTYPE alrm(void);
@@ -497,9 +362,10 @@ void stashname(void);
 void checkname(char *);
 void cmd_shell(char *buf);
 int makenoise(char *);
-void append(char *, FILE *);
+void append(char *, FILE *, int);
 void initmodes(void);
-char *getline(char *, int, int);
+char *pgetline(char *, int, int);
+RETSIGTYPE setcols(void);
 
 /* output.c */
 int output(void);
@@ -563,9 +429,6 @@ int printopts(FILE *, int, char, char *);
 int inlist(char *, char *);
 char *firstin(char *, char *);
 char *firstout(char *, char *);
-#ifndef HAVE_STRSTR
-char *strstr(char *, char *);
-#endif
 int listchn(void);
 struct chnname *addchn(struct chnname *, char *, int);
 FILE *openchn(void);

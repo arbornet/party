@@ -60,13 +60,15 @@ char *version= "2.13";		/* current party version */
 int inhelp=0;			/* Are we printing help text? */
 off_t tailed_from=0L;		/* File offset we last tailed back from */
 FILE *wfd;			/* Party file open for write */
+int lfd;			/* Party file lock */
 int rst;			/* Party file open for read */
 char *channel= NULL;		/* Current channel name (NULL is outside)*/
 char *progname;			/* Program name */
 char mailfile[80];		/* Name of mail file */
 int  mailfuse;			/* counter for deciding when to check mail */
 long mailsize;			/* old size of mail file */
-uid_t real_id, eff_id;		/* My real and effective group or user id */
+uid_t real_uid, eff_uid;	/* My real and effective group and user ids */
+gid_t real_gid, eff_gid;
 char inbuf[BFSZ+INDENT+2];      /* Text buffer - first 10 for "name:   " */
 char *txbuf= inbuf + INDENT;    /* Text buffer - pointer to respose portion */
 				/*               of inbuf */
@@ -75,14 +77,14 @@ RETSIGTYPE (*oldsigpipe)();	/* Old SIGPIPE handler */
 
 jump_buf jenv;
 
+int
 main(int argc, char **argv)
 {
-    register int n;
+    int n;
     char ch, *pnl;
     time_t lastaction;
-#ifndef NOSELECT
     fd_set input_set, iset;
-#endif
+    struct timeval tv;
 
     progname= leafname(argv[0]);	/* Get the program name */
 
@@ -124,12 +126,8 @@ main(int argc, char **argv)
 	for (n= 1; n < argc; n++)
 	    parseopts(argv[n],2);
 
-#ifdef SUID
-    real_id= getuid(); eff_id= geteuid();
-#endif
-#ifdef SGID
-    real_id= getgid(); eff_id= getegid();
-#endif
+    real_uid= getuid(); eff_uid= geteuid();
+    real_gid= getgid(); eff_gid= getegid();
 
     initmodes();
     setmailfile();
@@ -144,64 +142,38 @@ main(int argc, char **argv)
     signal(SIGINT,(RETSIGTYPE (*)())intr);
     signal(SIGTERM,(RETSIGTYPE (*)())term);
     oldsigpipe= signal(SIGPIPE,SIG_IGN);
-#ifdef NOSELECT
-    signal(SIGALRM,(RETSIGTYPE (*)())alrm);
-#endif /*NOSELECT*/
-#ifdef SIGTSTP
     signal(SIGTSTP,(RETSIGTYPE (*)())susp);
-#endif /*SIGTSTP*/
-#ifdef WINDOWS
     signal(SIGWINCH,(RETSIGTYPE (*)())setcols);
-#endif /*WINDOWS*/
 
     if (join_party(opt[OPT_START].str)) exit(1);
 
     /* Get in cbreak/noecho mode */
     STTY(0,&cbreak);
 
-#ifndef NOSELECT
     /* Set up the input file set for the select call */
     FD_ZERO(&input_set);
     FD_SET(0,&input_set);
-    FD_SET(rst,&input_set);
-#endif
 
     /* Main loop */
     lastaction= time((time_t *)0);
     for(;;)
     {
-#ifdef NOSELECT
+	memset(&tv, 0, sizeof(tv));
+ 	tv.tv_usec = 100000;  // 10 Hz.
 	/* Copy text while I can -- otherwise go to input mode */
 	if (output())
-	{ /*}*/
-	    /* Wait four seconds for a command */
-	    alarm(4);
-	    if (!setjump(jenv,1))
+	{
+	    /* Wait up to 4 seconds for input in file or from user */
+	    iset= input_set;
+	    select(rst+1, &iset, NULL, NULL, &tv);
+
+	    /* process typed command from user */
+	    if (FD_ISSET(0,&iset))
 	    {
-		read(0,&ch,1);	/* Alarm busts us out of here */
-		alarm(0);
-		docmd(ch);
-		lastaction= time((time_t *)0);
+	        read(0,&ch,1);
+	        docmd(ch);
+	        lastaction= time((time_t *)0);
 	    }
-#else
-	/* Wait for input in file or from user */
-	iset= input_set;
-	select(rst+1, &iset, NULL, NULL, NULL);
-
-	/* process typed command from user */
-	if (FD_ISSET(0,&iset))
-	{
-	    read(0,&ch,1);
-	    docmd(ch);
-	    lastaction= time((time_t *)0);
-	}
-
-	/* process new text in file */
-	if (FD_ISSET(rst,&iset))
-	{
-	    while (!output())
-		;
-#endif /*NOSELECT*/
 
 	    /* Check for new mail or idleness */
 	    if (mailfuse-- == 0)
@@ -235,15 +207,6 @@ main(int argc, char **argv)
 }
 
 
-#ifdef NOSELECT
-RETSIGTYPE alrm()
-{
-    signal(SIGALRM,(RETSIGTYPE (*)())alrm);
-    longjump(jenv,1);
-}
-#endif /*NOSELECT*/
-
-
 /* HELP: Prints a file name to the screen.  An interrupt brings you back to
  * party.  If complain is false, it silently does nothing when the file
  * doesn't exist.
@@ -254,7 +217,7 @@ void help(char *filename, int complain)
     register int hf;
     register int n;
 
-    if ((hf= open(filename,0)) < 0)
+    if ((hf= open(filename,O_RDONLY)) < 0)
     {
 	if (complain) err("Cannot open file %s\n",filename);
     }
@@ -347,7 +310,7 @@ void readfile(char *filename)
     /* Print user's name */
     txbuf[0]= '\n';
     txbuf[1]= '\0';
-    LOCK(wfd);
+    LOCK(lfd);
     fseek(wfd,0L,2);
     fputs(inbuf,wfd);
     fflush(wfd);
@@ -360,7 +323,7 @@ void readfile(char *filename)
 	if (strchr(txbuf,'\n') == NULL) fputc('\n',wfd);
 	fflush(wfd);
     }
-    UNLOCK(wfd);
+    UNLOCK(lfd);
     fclose(fp);
 }
 
@@ -372,13 +335,49 @@ void readfile(char *filename)
 char *chn_file_name(char *chn, int keeplog)
 {
     char *file;
+    size_t len;
 
-    file= (char *)malloc(strlen(opt[OPT_DIR].str)+CHN_LEN+6);
-    sprintf(file,"%s/%s.%s",
+    len= strlen(opt[OPT_DIR].str)+strlen(chn)+5+1;
+    file= (char *)malloc(len);
+    if (file == NULL)
+    {
+	err("malloc failed\n");
+	exit(1);
+    }
+    snprintf(file,len,"%s/%s.%s",
 	opt[OPT_DIR].str,
 	chn,
 	keeplog?"log":"tmp");
     return(file);
+}
+
+/* CHN_LOCKFILE_NAME:  return the channel lock file name for the named
+ * channel.  This is malloc'ed; the caller must free.
+ *
+ * Note that the lock file is separate from the channel file and is
+ * permitted only to the party user.  This separation prevents abusive
+ * users from doing antisocial things, like opening the channel file
+ * and taking a lock on it, preventing other users from joining, while
+ * still allowing us to keep (most) channel files world-readable, so
+ * that interested users can peek at them without joining.
+ */
+char *chn_lockfile_name(char *chn, int keeplog)
+{
+    char *lockfile;
+    size_t len;
+
+    len= strlen(opt[OPT_DIR].str)+strlen(chn)+1+strlen(".lock")+1+strlen("log")+2+1;
+    lockfile= (char *)malloc(len);
+    if (lockfile == NULL)
+    {
+	err("malloc failed");
+	exit(1);
+    }
+    snprintf(lockfile,len,"%s/.lock/%s.%s",
+        opt[OPT_DIR].str,
+	chn,
+	keeplog?"log":"tmp");
+    return(lockfile);
 }
 
 
@@ -389,8 +388,9 @@ char *chn_file_name(char *chn, int keeplog)
 int join_party(char *nch)
 {
     char *file;
+    char *lockfile;
     FILE *tmp_wfd;
-    int tmp_rst,oumask,waskept;
+    int tmp_lfd,tmp_rst,oumask,waskept;
     time_t now= time((time_t *)0);
     char newchannel[CHN_LEN+1];
     static char ch[CHN_LEN+1];
@@ -453,11 +453,26 @@ int join_party(char *nch)
 	{
 	    err("Cannot write partyfile %s\n",file);
 	    close(tmp_rst);
+	    close(tmp_lfd);
 	    free(file);
 	    if (channel != NULL) chnopt(channel);
 	    return(1);
 	}
 	free(file);
+
+	lockfile= chn_lockfile_name(newchannel,opt[OPT_KEEPLOG].yes);
+	tmp_lfd= open(lockfile,O_RDONLY|O_CREAT, 0600);
+	if (tmp_lfd < 0)
+	{
+	    err("channel %s not accessible\n(lock %s unreadable)\n",
+	        newchannel,lockfile);
+	    close(tmp_rst);
+	    free(lockfile);
+	    umask(oumask);
+	    if (channel != NULL) chnopt(channel);
+	    return(1);
+	}
+	free(lockfile);
 
 	if (debug) db("join_party: new channel open\n");
     }
@@ -475,10 +490,11 @@ int join_party(char *nch)
 	    write(out_fd,txbuf,strlen(txbuf));
 
 	    /* Put departure message in the file */
-	    append(txbuf,wfd);
+	    append(txbuf,wfd,lfd);
 
 	    /* Close the old files */
 	    fclose(wfd);
+	    close(lfd);
 	    close(rst);
 
 	    /* If it was a temporary channel and it is empty, delete it */
@@ -501,6 +517,7 @@ int join_party(char *nch)
     {
 	/* Make the new file the current file */
 	rst= tmp_rst;
+	lfd= tmp_lfd;
 	wfd= tmp_wfd;
 	tailed_from= 0L;
 
@@ -528,7 +545,7 @@ int join_party(char *nch)
 	setname(newchannel);
 
 	/* Put in a join message */
-	LOCK(wfd);
+	LOCK(lfd);
 	fseek(wfd,0L,2);
 	if (channel == NULL)
 	    fprintf(wfd,"---- %s joining (%.12s)\n",
@@ -537,7 +554,7 @@ int join_party(char *nch)
 	    fprintf(wfd,"---- %s joining from channel %s (%.12s)\n",
 		    name,channel,ctime(&now)+4);
 	fflush(wfd);
-	UNLOCK(wfd);
+	UNLOCK(lfd);
 
 	/* Wind back a few lines */
 	lseek(rst,0L,2);			/* Goto end of file */
@@ -630,7 +647,6 @@ int convert(char *c)
     return(n);
 }
 
-#ifdef LOCK_FCNTL
 /* Helper function to do fcntl locks.
  */
 
@@ -644,22 +660,6 @@ void setlock(int fd, int type)
     lk.l_len= 0L;
     fcntl(fd,F_SETLKW,&lk);
 }
-#endif /*LOCK_FCNTL*/
-
-#ifdef LOCK_LOCKING
-/* Keep calling locking() until it works or until we get sick and tired of
- * calling it.  This apparantly needs to be done because it doesn't block
- * properly. There may be problems with this.
- */
-
-void chk_lock(FILE *file, int request)
-{
-    register int i= 5;
-
-    while (locking(fileno(file), request, -1L) && i--)
-	sleep(1);
-}
-#endif /*LOCK_LOCKING*/
 
 
 /* BACKUP:  This seeks backwards by the given number of lines.
@@ -673,7 +673,7 @@ off_t backup(int lines)
     off_t off;
     int n;
 
-    if (lines <= 0) return;
+    if (lines <= 0) return 0;
 
     p= bub;
     off= lseek(rst,0L,1);
@@ -719,10 +719,6 @@ RETSIGTYPE intr()
 	return;
     }
 
-#ifdef NOSELECT
-    alarm(0);
-#endif /*NOSELECT*/
-
     signal(SIGINT,SIG_IGN);
     signal(SIGQUIT,SIG_IGN);
 
@@ -741,9 +737,6 @@ RETSIGTYPE term()
 {
     if (debug) db("killed\n");
 
-#ifdef NOSELECT
-    alarm(0);
-#endif /*NOSELECT*/
     signal(SIGINT,SIG_IGN);
     signal(SIGQUIT,SIG_IGN);
 
@@ -766,10 +759,6 @@ void done(int rc)
 {
     if (debug) db("exiting\n");
 
-#ifdef NOSELECT
-    alarm(0);
-#endif /*NOSELECT*/
-
     signal(SIGINT,SIG_IGN);
     signal(SIGQUIT,SIG_IGN);
 
@@ -787,9 +776,6 @@ RETSIGTYPE hup()
 {
     if (debug) db("hangup\n");
 
-#ifdef NOSELECT
-    alarm(0);
-#endif /*NOSELECT*/
     signal(SIGINT,SIG_IGN);
     signal(SIGQUIT,SIG_IGN);
 
@@ -803,24 +789,15 @@ RETSIGTYPE hup()
 /* SUSP: Suspend execution temporarily.
  */
 
-#ifdef SIGTSTP
 RETSIGTYPE susp()
 {
-#ifdef F_TERMIOS
     struct termios old;
-#endif
-#ifdef F_STTY
-    struct sgttyb old;
-#endif
     int mask;
     int was_shelled;
 
     if (debug) db("suspended\n");
 
     if (!(was_shelled= who_isout())) who_shout("^");
-#ifdef NOSELECT
-    alarm(0);
-#endif /*NOSELECT*/
     mask= sigblock(sigmask(SIGTSTP));
 
     GTTY(0,&old);
@@ -841,7 +818,6 @@ RETSIGTYPE susp()
 
     if (debug) db("restarted\n");
 }
-#endif /*SIGTSTP*/
 
 void db(char *msg, ...)
 {
