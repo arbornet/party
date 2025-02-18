@@ -1,38 +1,45 @@
 /* PARTY PROGRAM -- FILTER MANAGEMENT AND SIMILAR TRICKY STUFF -- Jan Wolter */
 
+#include <sys/types.h>
 #include <sys/wait.h>
+
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "party.h"
 #include "opt.h"
 
-int out_fd = 1;		/* File descriptor of terminal or external filter */
-char ofilter[BFSZ];	/* Command line of current filter */
+int out_fd = 1;     /* File descriptor of terminal or external filter */
+char ofilter[BFSZ]; /* Command line of current filter */
 
 /* START_FILTER:  Start up the external filter named by the filter option.
  * If some different filter is already running, we kill it first.
  */
 
-void start_filter()
+void
+start_filter()
 {
-    FILE *out_fp;
+	FILE *out_fp;
 
-    /* If a filter is running, and it is different, kill it */
-    if (out_fd != 1)
-    {
-	if (!strcmp(ofilter,opt[OPT_FILTER].str))
-	    return;
-	else
-	    stop_filter();
-    }
+	/* If a filter is running, and it is different, kill it */
+	if (out_fd != 1) {
+		if (!strcmp(ofilter, opt[OPT_FILTER].str))
+			return;
+		else
+			stop_filter();
+	}
 
-    if ((out_fp = upopen(opt[OPT_FILTER].str,"w")) == NULL)
-    {
-	err("cannot execute filter: %s\n",ofilter);
-	opt[OPT_FILTER].yes = 0;
-	return;
-    }
-    out_fd = fileno(out_fp);
-    strcpy(ofilter,opt[OPT_FILTER].str);
+	if ((out_fp = upopen(opt[OPT_FILTER].str, "w")) == NULL) {
+		err("cannot execute filter: %s\n", ofilter);
+		opt[OPT_FILTER].yes = 0;
+		return;
+	}
+	out_fd = fileno(out_fp);
+	strcpy(ofilter, opt[OPT_FILTER].str);
 }
 
 /* STOP_FILTER:  This shuts down any output filter currently running in
@@ -40,12 +47,13 @@ void start_filter()
  * to the terminal.  This is the normal method of shutting down a filter.
  */
 
-void stop_filter()
+void
+stop_filter()
 {
-    if (out_fd == 1)
-	return;
-    upclose();
-    out_fd= 1;
+	if (out_fd == 1)
+		return;
+	upclose();
+	out_fd = 1;
 }
 
 /* KILL_FILTER:  This shuts down any output filter currently running in
@@ -54,14 +62,14 @@ void stop_filter()
  * or a hangup.
  */
 
-void kill_filter()
+void
+kill_filter()
 {
-    if (out_fd == 1)
-	return;
-    upkill();
-    out_fd= 1;
+	if (out_fd == 1)
+		return;
+	upkill();
+	out_fd = 1;
 }
-
 
 /* UPOPEN/UPCLOSE/UPKILL - Run command on a pipe
  *
@@ -73,78 +81,82 @@ void kill_filter()
  *    upkill() just murders the child process and returns.
  */
 
-FILE *f_lastpop = NULL;		/* current upopened stream  (NULL means none) */
-int p_lastpop;			/* process id of last upopened command */
+FILE *f_lastpop = NULL; /* current upopened stream  (NULL means none) */
+int p_lastpop;          /* process id of last upopened command */
 
-FILE *upopen(char *cmd, char *mode)
+FILE *
+upopen(char *cmd, char *mode)
 {
-    int pip[2];
-    int chd_pipe,par_pipe;
+	int pip[2];
+	int chd_pipe, par_pipe;
 
-    if (f_lastpop) upclose();
+	if (f_lastpop)
+		upclose();
 
-    /* Make a pipe */
-    if (pipe(pip)) return((FILE *)0);
+	/* Make a pipe */
+	if (pipe(pip))
+		return ((FILE *)0);
 
-    /* Choose ends */
-    par_pipe= (*mode == 'r') ? pip[0] : pip[1];
-    chd_pipe= (*mode == 'r') ? pip[1] : pip[0];
+	/* Choose ends */
+	par_pipe = (*mode == 'r') ? pip[0] : pip[1];
+	chd_pipe = (*mode == 'r') ? pip[1] : pip[0];
 
-    switch (p_lastpop= fork())
-    {
-    case 0:
-	/* Child - run command */
-	signal(SIGINT,SIG_IGN);
-	signal(SIGQUIT,SIG_IGN);
-	close(par_pipe);
-	if (chd_pipe != (*mode == 'r'?1:0))
-	{
-	    dup2(chd_pipe,(*mode == 'r'?1:0));
-	    close(chd_pipe);
+	switch (p_lastpop = fork()) {
+	case 0:
+		/* Child - run command */
+		signal(SIGINT, SIG_IGN);
+		signal(SIGQUIT, SIG_IGN);
+		close(par_pipe);
+		if (chd_pipe != (*mode == 'r' ? 1 : 0)) {
+			dup2(chd_pipe, (*mode == 'r' ? 1 : 0));
+			close(chd_pipe);
+		}
+		setuid(getuid());
+		setgid(getgid());
+		execcmd(cmd);
+		exit(-1);
+	case -1:
+		close(chd_pipe);
+		close(par_pipe);
+		return (FILE *)0;
+	default:
+		close(chd_pipe);
+		return f_lastpop = fdopen(par_pipe, mode);
 	}
-	setuid(getuid());
-	setgid(getgid());
-	execcmd(cmd);
-	exit(-1);
-    case -1:
-	close(chd_pipe);
-	close(par_pipe);
-	return (FILE *)0;
-    default:
-	close(chd_pipe);
-	return f_lastpop=fdopen(par_pipe,mode);
-    }
 }
 
-void upclose()
+void
+upclose()
 {
-    int pid;
+	int pid;
 
-    if (f_lastpop == NULL || fclose(f_lastpop)) return;
+	if (f_lastpop == NULL || fclose(f_lastpop))
+		return;
 
-    f_lastpop=NULL;
-    while ((pid=wait((int *)0)) != -1 && pid != p_lastpop )
-	    ;
+	f_lastpop = NULL;
+	while ((pid = wait((int *)0)) != -1 && pid != p_lastpop);
 }
 
-void upkill()
+void
+upkill()
 {
-    if (f_lastpop != NULL)
-	kill(p_lastpop,SIGTERM);
+	if (f_lastpop != NULL)
+		kill(p_lastpop, SIGTERM);
 }
 
 /* PRINTEXEC: Print the given string, unless the first characters is a !
  * in which case we exec it.
  */
 
-void printexec(FILE *fp, char *str)
+void
+printexec(FILE *fp, char *str)
 {
-    if (*str == '!')
-	usystem(str+1);
-    else if (*str == '/')
-	help(str,1);
-    else
-	fprintf(fp,"%s\n",str);
+	if (*str == '!')
+		usystem(str + 1);
+	else if (*str == '/')
+		help(str, 1);
+	else
+		fprintf(fp, "%s\n", str);
 }
 
 /* USYSTEM:  A modified version of the system() command that resets the uid
@@ -153,67 +165,66 @@ void printexec(FILE *fp, char *str)
  * command directly instead of starting a shell to parse it.
  */
 
-void usystem(char *cmd)
+void
+usystem(char *cmd)
 {
-    register int cpid,wpid;
-    RETSIGTYPE (*old_intr)(), (*old_quit)();
+	register int cpid, wpid;
+	RETSIGTYPE (*old_intr)(), (*old_quit)();
 
-    if (debug) db("usystem: %s\n",cmd);
+	if (debug)
+		db("usystem: %s\n", cmd);
 
-    if ((cpid = fork()) == 0)
-    {
-	dup2(2,1);
-	setuid(getuid());
-	setgid(getgid());
-	signal(SIGPIPE,oldsigpipe);
-	execcmd(cmd);
-	exit(-1);
-    }
-    old_intr = signal(SIGINT,SIG_IGN);
-    old_quit = signal(SIGQUIT,SIG_IGN);
-    while ((wpid = wait((int *)0)) != cpid && wpid != -1)
-	;
-    signal(SIGINT,old_intr);
-    signal(SIGQUIT,old_quit);
+	if ((cpid = fork()) == 0) {
+		dup2(2, 1);
+		setuid(getuid());
+		setgid(getgid());
+		signal(SIGPIPE, oldsigpipe);
+		execcmd(cmd);
+		exit(-1);
+	}
+	old_intr = signal(SIGINT, SIG_IGN);
+	old_quit = signal(SIGQUIT, SIG_IGN);
+	while ((wpid = wait((int *)0)) != cpid && wpid != -1);
+	signal(SIGINT, old_intr);
+	signal(SIGQUIT, old_quit);
 
-    if (debug) db("usystem done\n");
+	if (debug)
+		db("usystem done\n");
 }
 
-void execcmd(char *cmd)
+void
+execcmd(char *cmd)
 {
-    char *cmdv[200];
-    char *cp;
-    int i,j;
+	char *cmdv[200];
+	char *cp;
+	int i, j;
 
-    /* If there are no fancy characters in it, parse it ourselves */
-    if (opt[OPT_FASTSHELL].yes &&
-	strpbrk(cmd,"<>*?|![]{}~`$&';\\\"") == NULL)
-    {
-	/* Skip leading spaces */
-	cp= firstout(cmd," \t");
-	cmdv[i=0] = cp;
+	/* If there are no fancy characters in it, parse it ourselves */
+	if (opt[OPT_FASTSHELL].yes &&
+	    strpbrk(cmd, "<>*?|![]{}~`$&';\\\"") == NULL) {
+		/* Skip leading spaces */
+		cp = firstout(cmd, " \t");
+		cmdv[i = 0] = cp;
 
-	/* Break up args at the spaces */
-	while (*(cp= firstin(cp," \t")) != '\0')
-	{
-	    *(cp++) = '\0';
-	    cp= firstout(cp," \t");
-	    if (*cp != '\0')
-		cmdv[++i] = cp;
+		/* Break up args at the spaces */
+		while (*(cp = firstin(cp, " \t")) != '\0') {
+			*(cp++) = '\0';
+			cp = firstout(cp, " \t");
+			if (*cp != '\0')
+				cmdv[++i] = cp;
+		}
+
+		/* Ignore Null command */
+		if (cmdv[0] == cp)
+			return;
+		cmdv[i + 1] = NULL;
+
+		execvp(cmdv[0], cmdv);
+		fprintf(stderr, "%s: cannot execute %s\n", progname, cmdv[0]);
+	} else {
+		execl(opt[OPT_SHELL].str, leafname(opt[OPT_SHELL].str), "-c",
+		    cmd, (char *)NULL);
+		fprintf(stderr, "%s: cannot execute shell %s\n", progname,
+		    opt[OPT_SHELL].str);
 	}
-
-	/* Ignore Null command */
-	if (cmdv[0] == cp) return;
-	cmdv[i+1] = NULL;
-
-	execvp(cmdv[0],cmdv);
-	fprintf(stderr,"%s: cannot execute %s\n",progname,cmdv[0]);
-    }
-    else
-    {
-	execl(opt[OPT_SHELL].str,leafname(opt[OPT_SHELL].str),"-c",
-		cmd,(char *)NULL);
-	fprintf(stderr,"%s: cannot execute shell %s\n",
-		progname,opt[OPT_SHELL].str);
-    }
 }
